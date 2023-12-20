@@ -35,7 +35,7 @@ repositories {
 
 dependencies {
     implementation 'com.facebook.react:react-native:+'
-    implementation 'com.auth0.android:guardian:0.4.0'
+    implementation 'com.auth0.android:guardian:0.7.0'
     implementation 'com.google.code.gson:gson:2.8.5'
 }
   

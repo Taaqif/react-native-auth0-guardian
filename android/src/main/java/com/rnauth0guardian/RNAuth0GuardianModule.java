@@ -98,8 +98,11 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
 
   @ReactMethod
   public void enroll(String enrollmentURI, String FCMToken, final Promise promise){
+    Log.i(TAG, "ENROLL ATTEMPTED");
     String deviceName = android.os.Build.MODEL;
+    Log.i(TAG, "DEVICE MODEL: " + deviceName);
     CurrentDevice device = new CurrentDevice(this.reactContext, FCMToken, deviceName);
+    Log.i(TAG, "DEVICE CONTEXT ESTABLISHED");
     try {
       KeyPair keyPair = generateKeyPair();
       if(keyPair != null) {
