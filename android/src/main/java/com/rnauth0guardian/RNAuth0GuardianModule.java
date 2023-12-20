@@ -67,13 +67,18 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
 
   @ReactMethod
   public void initialize(String domain, Promise promise) {
+    Log.i(TAG, "Initialized attempted" + domain);
     try {
-      guardian = new Guardian.Builder()
-        .domain(domain)
-        .build();
+      guardian = new Guardian.Builder();
+      Log.i(TAG, "Builder created");
+      guardian.domain(domain)
+      Log.i(TAG, "Domain added");
+      guardian.build();
+      Log.i(TAG, "Guardian built");
+
       enrollment = getEnrollment();
-      promise.resolve(true);
       Log.i("SAVED ENROLLMENT", enrollment.toJSON());
+      promise.resolve(true);
     } catch (Exception err){
       promise.reject(err);
     }
