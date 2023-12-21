@@ -136,7 +136,7 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
       Log.d(TAG, "Builder complete");
 
       enrollment = getEnrollment();
-      if (enrollment != null && !enrollment.isEmpty()) {
+      if (enrollment != null) {
         Log.i(TAG, enrollment.toJSON());
       } else {
         Log.i(TAG, "Enrollment is empty");
