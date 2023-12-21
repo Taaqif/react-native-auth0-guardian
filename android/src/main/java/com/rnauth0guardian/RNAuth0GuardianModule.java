@@ -108,7 +108,7 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
     }
   }
 
-  private GuardianAPIClient buildGuardianApiClient(String domain) throws ClassNotFoundException {
+  private GuardianAPIClient buildGuardianApiClient(String domain) throws Exception {
     // reflect to make access the constructor
     Class<?> guardianApiClientClass = Class.forName("com.auth0.android.guardian.sdk.GuardianAPIClient");
     Constructor<?> guardianApiClientConstructor = guardianApiClientClass.getDeclaredConstructor(RequestFactory.class, HttpUrl.class);
