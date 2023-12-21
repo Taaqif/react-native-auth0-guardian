@@ -22,6 +22,7 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.Promise;
 import com.auth0.android.guardian.sdk.Guardian;
+import com.auth0.android.guardian.sdk.GuardianAPIClient;
 import com.facebook.react.bridge.ReadableMap;
 
 import java.security.KeyPair;
