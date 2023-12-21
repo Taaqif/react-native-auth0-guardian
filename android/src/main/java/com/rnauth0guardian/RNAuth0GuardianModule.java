@@ -7,7 +7,7 @@
 //
 
 package com.rnauth0guardian;
-import java.io;
+import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import android.content.SharedPreferences;
