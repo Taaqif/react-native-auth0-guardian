@@ -114,9 +114,9 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
     Constructor<?> guardianApiClientConstructor = guardianApiClientClass.getDeclaredConstructor(RequestFactory.class, HttpUrl.class);
     guardianApiClientConstructor.setAccessible(true);
 
-    Uri url = new Uri.Builder()
+    HttpUrl url = new HttpUrl.Builder()
       .scheme("https")
-      .authority(domain)
+      .host(domain)
       .build();
 
     final OkHttpClient.Builder builder = new OkHttpClient.Builder();
