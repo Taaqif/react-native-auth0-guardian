@@ -109,6 +109,10 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
       constructor.setAccessible(true);
 
       // Create an instance by invoking the constructor
+      Uri url = new Uri.Builder()
+        .scheme("https")
+        .authority(domain)
+        .build();
       GuardianAPIClient.Builder builder = new GuardianAPIClient.Builder()
         .url(url);
 
