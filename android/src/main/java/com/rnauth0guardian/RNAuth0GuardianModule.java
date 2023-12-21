@@ -12,6 +12,7 @@ import java.lang.reflect.InvocationTargetException;
 import android.content.SharedPreferences;
 import android.util.Log;
 import android.net.Uri;
+import android.util.Base64;
 
 import com.auth0.android.guardian.sdk.CurrentDevice;
 import com.auth0.android.guardian.sdk.Enrollment;
@@ -31,6 +32,17 @@ import java.security.KeyPairGenerator;
 
 import java.security.NoSuchAlgorithmException;
 import java.util.Map;
+
+import okhttp3.HttpUrl;
+import okhttp3.Interceptor;
+import okhttp3.OkHttpClient;
+import okhttp3.Response;
+import okhttp3.logging.HttpLoggingInterceptor;
+
+import com.auth0.android.guardian.sdk.networking.RequestFactory;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.reflect.TypeToken;
 
 import static android.content.Context.MODE_PRIVATE;
 
@@ -95,28 +107,61 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
     }
   }
 
+  private GuardianAPIClient buildGuardianApiClient(String domain) {
+    // reflect to make access the constructor
+    Class<?> guardianApiClientClass = Class.forName("com.auth0.android.guardian.sdk.Guardian");
+    Constructor<?> guardianApiClientConstructor = guardianApiClientClass.getDeclaredConstructor(RequestFactory.class, HttpUrl.class);
+    guardianApiClientConstructor.setAccessible(true);
+
+    Uri url = new Uri.Builder()
+      .scheme("https")
+      .authority(domain)
+      .build();
+
+    final OkHttpClient.Builder builder = new OkHttpClient.Builder();
+
+    final String clientInfo = Base64.encodeToString(
+        String.format("{\"name\":\"Guardian.Android\",\"version\":\"%s\"}",
+          BuildConfig.VERSION_NAME).getBytes(),
+        Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
+
+    builder.addInterceptor(new Interceptor() {
+      @Override
+      public Response intercept(Chain chain) throws IOException {
+        okhttp3.Request originalRequest = chain.request();
+        okhttp3.Request requestWithUserAgent = originalRequest.newBuilder()
+          .header("Accept-Language",
+              Locale.getDefault().toString())
+          .header("User-Agent",
+              String.format("GuardianSDK/%s Android %s",
+                BuildConfig.VERSION_NAME,
+                Build.VERSION.RELEASE))
+          .header("Auth0-Client", clientInfo)
+          .build();
+        return chain.proceed(requestWithUserAgent);
+      }
+    });
+
+    OkHttpClient client = builder.build();
+
+    Gson gson = new GsonBuilder().create();
+
+    RequestFactory requestFactory = new RequestFactory(gson, client);
+
+    GuardianAPIClient guardianAPIClient = (GuardianAPIClient) guardianApiClientConstructor.newInstance(requestFactory, baseUrl);
+    return guardianAPIClient;
+  }
+
   @ReactMethod
   public void initialize(String domain, Promise promise) {
     Log.d(TAG, "Initialized attempted:" + domain);
     try {
-      // Get the class object for Guardian
+      // reflect to make access the constructor
       Class<?> guardianClass = Class.forName("com.auth0.android.guardian.sdk.Guardian");
+      Constructor<?> guardianConstructor = guardianClass.getDeclaredConstructor(GuardianAPIClient.class);
+      guardianConstructor.setAccessible(true);
 
-      // Get the constructor with the appropriate parameter type
-      Constructor<?> constructor = guardianClass.getDeclaredConstructor(GuardianAPIClient.class);
-
-      // Make the constructor accessible, even if it's private
-      constructor.setAccessible(true);
-
-      // Create an instance by invoking the constructor
-      Uri url = new Uri.Builder()
-        .scheme("https")
-        .authority(domain)
-        .build();
-      GuardianAPIClient.Builder builder = new GuardianAPIClient.Builder()
-        .url(url);
-
-      guardian = (Guardian) constructor.newInstance(builder.build());
+      guardian = (Guardian) constructor.newInstance(buildGuardianApiClient(domain));
       Log.d(TAG, "Builder complete");
 
       enrollment = getEnrollment();
