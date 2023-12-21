@@ -7,6 +7,7 @@
 //
 
 package com.rnauth0guardian;
+import java.io;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import android.content.SharedPreferences;
@@ -32,7 +33,6 @@ import java.security.KeyPairGenerator;
 
 import java.security.NoSuchAlgorithmException;
 import java.util.Map;
-import java.util.Locale;
 
 import okhttp3.HttpUrl;
 import okhttp3.Interceptor;
@@ -123,7 +123,7 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
 
     final String clientInfo = Base64.encodeToString(
         String.format("{\"name\":\"Guardian.Android\",\"version\":\"%s\"}",
-          BuildConfig.VERSION_NAME).getBytes(),
+          "1.0").getBytes(),
         Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
 
     builder.addInterceptor(new Interceptor() {
@@ -132,11 +132,11 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
         okhttp3.Request originalRequest = chain.request();
         okhttp3.Request requestWithUserAgent = originalRequest.newBuilder()
           .header("Accept-Language",
-              Locale.getDefault().toString())
+              "en")
           .header("User-Agent",
               String.format("GuardianSDK/%s Android %s",
-                BuildConfig.VERSION_NAME,
-                Build.VERSION.RELEASE))
+                "1.0",
+                "21"))
           .header("Auth0-Client", clientInfo)
           .build();
         return chain.proceed(requestWithUserAgent);
@@ -149,7 +149,7 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
 
     RequestFactory requestFactory = new RequestFactory(gson, client);
 
-    GuardianAPIClient guardianAPIClient = (GuardianAPIClient) guardianApiClientConstructor.newInstance(requestFactory, baseUrl);
+    GuardianAPIClient guardianAPIClient = (GuardianAPIClient) guardianApiClientConstructor.newInstance(requestFactory, url);
     return guardianAPIClient;
   }
 
@@ -162,7 +162,7 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
       Constructor<?> guardianConstructor = guardianClass.getDeclaredConstructor(GuardianAPIClient.class);
       guardianConstructor.setAccessible(true);
 
-      guardian = (Guardian) constructor.newInstance(buildGuardianApiClient(domain));
+      guardian = (Guardian) guardianConstructor.newInstance(buildGuardianApiClient(domain));
       Log.d(TAG, "Builder complete");
 
       enrollment = getEnrollment();
