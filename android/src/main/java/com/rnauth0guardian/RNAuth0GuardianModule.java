@@ -10,6 +10,7 @@ package com.rnauth0guardian;
 
 import android.content.SharedPreferences;
 import android.util.Log;
+import android.net.Uri;
 
 import com.auth0.android.guardian.sdk.CurrentDevice;
 import com.auth0.android.guardian.sdk.Enrollment;
