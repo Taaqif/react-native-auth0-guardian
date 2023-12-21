@@ -7,7 +7,8 @@
 //
 
 package com.rnauth0guardian;
-
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import android.content.SharedPreferences;
 import android.util.Log;
 import android.net.Uri;
@@ -98,13 +99,20 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
   public void initialize(String domain, Promise promise) {
     Log.d(TAG, "Initialized attempted:" + domain);
     try {
-      Guardian.Builder builder = new Guardian.Builder();
-      Log.d(TAG, "Builder created");
-      builder.enableLogging();
-      Log.d(TAG, "logging enabled");
-      builder.domain(domain);
-      Log.d(TAG, "domain assigned");
-      guardian = builder.build();
+      // Get the class object for Guardian
+      Class<?> guardianClass = Class.forName("com.auth0.android.guardian.sdk.Guardian");
+
+      // Get the constructor with the appropriate parameter type
+      Constructor<?> constructor = guardianClass.getDeclaredConstructor(GuardianAPIClient.class);
+
+      // Make the constructor accessible, even if it's private
+      constructor.setAccessible(true);
+
+      // Create an instance by invoking the constructor
+      GuardianAPIClient.Builder builder = new GuardianAPIClient.Builder()
+        .url(url);
+
+      guardian = (Guardian) constructor.newInstance(builder.build());
       Log.d(TAG, "Builder complete");
 
       enrollment = getEnrollment();
