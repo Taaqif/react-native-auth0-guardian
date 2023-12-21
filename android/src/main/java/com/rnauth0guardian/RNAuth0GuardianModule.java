@@ -32,6 +32,7 @@ import java.security.KeyPairGenerator;
 
 import java.security.NoSuchAlgorithmException;
 import java.util.Map;
+import java.util.Locale;
 
 import okhttp3.HttpUrl;
 import okhttp3.Interceptor;
