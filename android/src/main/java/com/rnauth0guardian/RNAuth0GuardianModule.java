@@ -81,43 +81,13 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
     prefsEditor.commit();
   }
 
-  @ReactMethod
-  public void initializeWithUrl(String domain, Promise promise) {
-    Log.d(TAG, "Initialized attempted:" + domain);
-    Uri url = new Uri.Builder()
-      .scheme("https")
-      .authority(domain)
-      .build();
-    Log.d(TAG, "url built" + url.toString());
-
-    try {
-      Guardian.Builder builder = new Guardian.Builder();
-      Log.d(TAG, "Builder created");
-      builder.enableLogging();
-      Log.d(TAG, "logging enabled");
-      builder.url(url);
-      Log.d(TAG, "url assigned");
-      guardian = builder.build();
-      Log.d(TAG, "Builder complete");
-
-      enrollment = getEnrollment();
-      Log.i("SAVED ENROLLMENT", enrollment.toJSON());
-      promise.resolve(true);
-    } catch (Exception err){
-      promise.reject(err);
-    }
-  }
-
   private GuardianAPIClient buildGuardianApiClient(String domain) throws Exception {
     // reflect to make access the constructor
     Class<?> guardianApiClientClass = Class.forName("com.auth0.android.guardian.sdk.GuardianAPIClient");
     Constructor<?> guardianApiClientConstructor = guardianApiClientClass.getDeclaredConstructor(RequestFactory.class, HttpUrl.class);
     guardianApiClientConstructor.setAccessible(true);
 
-    HttpUrl url = new HttpUrl.Builder()
-      .scheme("https")
-      .host(domain)
-      .build();
+    HttpUrl url = HttpUrl.parse(domain);
 
     final OkHttpClient.Builder builder = new OkHttpClient.Builder();
 
@@ -166,7 +136,11 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
       Log.d(TAG, "Builder complete");
 
       enrollment = getEnrollment();
-      Log.i("SAVED ENROLLMENT", enrollment.toJSON());
+      if (enrollment != null && !enrollment.isEmpty()) {
+        Log.i(TAG, enrollment.toJSON());
+      } else {
+        Log.i(TAG, "Enrollment is empty");
+      }
       promise.resolve(true);
     } catch (Exception err){
       promise.reject(err);
@@ -220,7 +194,7 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
 
     } catch (Exception err){
       promise.reject(err);
-      Log.e("AUTH0 GUARDIAN", "ENROLLMENT EXCEPTION", err);
+      Log.e(TAG, "ENROLLMENT EXCEPTION", err);
     }
 
   }
