@@ -96,7 +96,7 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
     try {
       guardian = new Guardian.Builder();
       Log.d(TAG, "Builder created");
-      guardian.domain(domain)
+      guardian.domain(domain);
       Log.d(TAG, "Domain added");
       guardian.build();
       Log.d(TAG, "Guardian built");
