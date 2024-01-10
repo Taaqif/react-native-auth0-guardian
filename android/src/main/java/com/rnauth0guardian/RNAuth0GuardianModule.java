@@ -38,11 +38,21 @@ import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Map;
 
+import okhttp3.HttpUrl;
+import okhttp3.Interceptor;
+import okhttp3.OkHttpClient;
+import okhttp3.Response;
+
+import com.auth0.android.guardian.sdk.GuardianAPIClient;
+import com.auth0.android.guardian.sdk.networking.RequestFactory;
+
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.reflect.TypeToken;
 
 import static android.content.Context.MODE_PRIVATE;
+
+import androidx.annotation.NonNull;
 
 public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
 
@@ -52,7 +62,7 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
 
   private Guardian guardian;
   SharedPreferences mPrefs;
-  private ArrayList<ParcelableEnrollment> enrollments;
+  private ArrayList<ParcelableEnrollment> enrollments = new ArrayList<>();
 
   private static final String ENROLLMENTS = "ENROLLMENTS";
   private static final Exception DEVICE_NOT_ENROLLED_EXCEPTION = new IllegalStateException("DEVICE_NOT_ENROLLED");
@@ -63,7 +73,7 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
     mPrefs = this.reactContext.getSharedPreferences("RNAuth0GuardianPrefs", MODE_PRIVATE);
   }
 
-  private ArrayList<ParcelableEnrollment> getEnrollments() {
+  private ArrayList<ParcelableEnrollment> getSavedEnrollments() {
     String json = mPrefs.getString(ENROLLMENTS, "[]");
     Type enrollmentListType = new TypeToken<ArrayList<ParcelableEnrollment>>(){}.getType();
     return JSON.fromJson(json, enrollmentListType);
@@ -88,16 +98,63 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
     prefsEditor.commit();
   }
 
+  private GuardianAPIClient buildGuardianApiClient(String domain) throws Exception {
+    // reflect to make access the constructor
+    Class<?> guardianApiClientClass = Class.forName("com.auth0.android.guardian.sdk.GuardianAPIClient");
+    Constructor<?> guardianApiClientConstructor = guardianApiClientClass.getDeclaredConstructor(RequestFactory.class,
+            HttpUrl.class);
+    guardianApiClientConstructor.setAccessible(true);
+
+    HttpUrl url = HttpUrl.parse(domain);
+
+    final OkHttpClient.Builder builder = new OkHttpClient.Builder();
+
+    final String clientInfo = Base64.encodeToString(
+            String.format("{\"name\":\"Guardian.Android\",\"version\":\"%s\"}",
+                    "1.0").getBytes(),
+            Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
+
+    builder.addInterceptor(new Interceptor() {
+      @NonNull
+      @Override
+      public Response intercept(@NonNull Chain chain) throws IOException {
+        okhttp3.Request originalRequest = chain.request();
+        okhttp3.Request requestWithUserAgent = originalRequest.newBuilder()
+                .header("Accept-Language",
+                        "en")
+                .header("User-Agent",
+                        String.format("GuardianSDK/%s Android %s",
+                                "1.0",
+                                "21"))
+                .header("Auth0-Client", clientInfo)
+                .build();
+        return chain.proceed(requestWithUserAgent);
+      }
+    });
+
+    OkHttpClient client = builder.build();
+
+    RequestFactory requestFactory = new RequestFactory(JSON, client);
+
+    return (GuardianAPIClient) guardianApiClientConstructor.newInstance(requestFactory,
+            url);
+  }
+
+
   @ReactMethod
   public void initialize(String domain, Promise promise) {
     Log.i(TAG, "Initialized attempted:" + domain);
     try {
-      guardian = new Guardian.Builder()
-              .domain(domain)
-              .build();
+      // reflect to make access the constructor
+      Class<?> guardianClass = Class.forName("com.auth0.android.guardian.sdk.Guardian");
+      Constructor<?> guardianConstructor = guardianClass.getDeclaredConstructor(GuardianAPIClient.class);
+      guardianConstructor.setAccessible(true);
+
+      guardian = (Guardian) guardianConstructor.newInstance(buildGuardianApiClient(domain));
+
       Log.i(TAG, "Builder complete");
 
-      enrollments = getEnrollments();
+      enrollments = getSavedEnrollments();
       if (enrollments != null) {
         Log.i(TAG, enrollments.size() + " ENROLLMENTS FOUND");
       } else {
@@ -121,6 +178,7 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
     return null;
   }
 
+  @NonNull
   @Override
   public String getName() {
     return "RNAuth0Guardian";
@@ -131,15 +189,16 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
 
     Log.i(TAG, "GETTING ENROLLMENTS");
     try {
-
       WritableArray writableArray = Arguments.createArray();
-
-      for (ParcelableEnrollment item : enrollments) {
-        // Convert each item to a WritableMap and add it to the array
-        WritableMap writableMap = item.toWritableMap();
-        writableArray.pushMap(writableMap);
+      if(enrollments != null){
+        for (ParcelableEnrollment item : enrollments) {
+          // Convert each item to a WritableMap and add it to the array
+          WritableMap writableMap = item.toWritableMap();
+          writableArray.pushMap(writableMap);
+        }
       }
       promise.resolve(writableArray);
+
     } catch (Exception err) {
       promise.reject(err);
       Log.e(TAG, "COULD NOT GET ENROLLMENTS", err);
@@ -200,11 +259,10 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
 
   @ReactMethod
   public void allow(ReadableMap data, final Promise promise) {
-    Map parsedData = MapUtil.toMap(data);
-    ParcelableNotification notification = Guardian.parseNotification(parsedData);
-    ParcelableEnrollment enrollment = getEnrollment(notification.getEnrollmentId());
     try {
-
+      Map parsedData = MapUtil.toMap(data);
+      ParcelableNotification notification = Guardian.parseNotification(parsedData);
+      ParcelableEnrollment enrollment = getEnrollment(notification.getEnrollmentId());
       if (enrollment != null) {
         guardian
             .allow(notification, enrollment)
@@ -260,17 +318,6 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
       Log.e(TAG, "REJECT FAILED!", err);
       promise.reject(err);
     }
-  }
-
-  @ReactMethod
-  public void getAllEnrollments(final Promise promise) {
-    try {
-      promise.resolve(JSON);
-    } catch (Exception err) {
-      Log.e(TAG, "GETTING ALL ENROLLMENTS FAILED!", err);
-      promise.reject(err);
-    }
-
   }
 
   @ReactMethod
