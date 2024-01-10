@@ -5,11 +5,11 @@ export function initializeWithUrl(auth0Domain: string): Promise<boolean>;
 export function enroll(
   enrollmentURI: string,
   deviceToken: string,
-): Promise<string>;
+): Promise<any>;
 
-export function unenroll(): Promise<boolean>;
+export function unenroll(enrollmentId: string): Promise<boolean>;
 
-export function getTOTP(): Promise<string>;
+export function getTOTP(enrollmentId: string): Promise<string>;
 
 export function allow(notificationData: {
   [key: string]: string;
@@ -21,4 +21,3 @@ export function reject(notificationData: {
 declare namespace Auth0Guardian {}
 
 export default Auth0Guardian;
-

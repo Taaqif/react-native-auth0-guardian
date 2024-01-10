@@ -7,6 +7,7 @@
 //
 
 package com.rnauth0guardian;
+
 import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -32,6 +33,8 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import okhttp3.HttpUrl;
@@ -47,17 +50,17 @@ import com.google.gson.reflect.TypeToken;
 
 import static android.content.Context.MODE_PRIVATE;
 
-
 public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
 
   private final ReactApplicationContext reactContext;
   private static final String TAG = RNAuth0GuardianModule.class.getName();
+  private static final Gson JSON = new GsonBuilder().create();
 
   private Guardian guardian;
   SharedPreferences mPrefs;
-  private ParcelableEnrollment enrollment;
+  private ArrayList<ParcelableEnrollment> enrollments;
 
-  private static final String ENROLLMENT = "ENROLLMENT";
+  private static final String ENROLLMENT = "ENROLLMENTS";
   private static final Exception DEVICE_NOT_ENROLLED_EXCEPTION = new IllegalStateException("DEVICE_NOT_ENROLLED");
 
   public RNAuth0GuardianModule(ReactApplicationContext reactContext) {
@@ -66,17 +69,30 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
     mPrefs = this.reactContext.getSharedPreferences("myPrefsKeys", MODE_PRIVATE);
   }
 
-  private ParcelableEnrollment getEnrollment(){
+  private List<ParcelableEnrollment> getEnrollments() {
     String json = mPrefs.getString(ENROLLMENT, "");
     Log.e(TAG, json);
-    return ParcelableEnrollment.fromJSON(json);
+    Type enrollmentListType = new TypeToken<ArrayList<ParcelableEnrollment>>() {}.getType();
+    ArrayList<ParcelableEnrollment> enrollmentArray = JSON.fromJson(json, enrollmentListType);
+    return enrollmentArray;
   }
 
-  private void saveEnrollment(Enrollment data){
+  private ParcelableEnrollment getEnrollment(String enrollmentId) {
+    ParcelableEnrollment enrollment = null;
+    if (enrollmentId != null && !enrollmentId.trim().isEmpty()) {
+      enrollment = enrollments.stream().filter(e -> e.enrollmentId.equals(enrollmentId)).findFirst().orElse(null);
+    }else if (enrollments.size() === 1){
+      enrollments.stream().findFirst();
+    }
+    return enrollment;
+
+  }
+
+  private void saveEnrollment(Enrollment data) {
     SharedPreferences.Editor prefsEditor = mPrefs.edit();
     ParcelableEnrollment parcelableEnrollment = new ParcelableEnrollment(data);
-    enrollment = parcelableEnrollment;
-    String json = parcelableEnrollment.toJSON();
+    enrollment.add(parcelableEnrollment);
+    String json = JSON.toJson(enrollment);
     prefsEditor.putString(ENROLLMENT, json);
     prefsEditor.commit();
   }
@@ -84,7 +100,8 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
   private GuardianAPIClient buildGuardianApiClient(String domain) throws Exception {
     // reflect to make access the constructor
     Class<?> guardianApiClientClass = Class.forName("com.auth0.android.guardian.sdk.GuardianAPIClient");
-    Constructor<?> guardianApiClientConstructor = guardianApiClientClass.getDeclaredConstructor(RequestFactory.class, HttpUrl.class);
+    Constructor<?> guardianApiClientConstructor = guardianApiClientClass.getDeclaredConstructor(RequestFactory.class,
+        HttpUrl.class);
     guardianApiClientConstructor.setAccessible(true);
 
     HttpUrl url = HttpUrl.parse(domain);
@@ -93,7 +110,7 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
 
     final String clientInfo = Base64.encodeToString(
         String.format("{\"name\":\"Guardian.Android\",\"version\":\"%s\"}",
-          "1.0").getBytes(),
+            "1.0").getBytes(),
         Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
 
     builder.addInterceptor(new Interceptor() {
@@ -101,25 +118,24 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
       public Response intercept(Chain chain) throws IOException {
         okhttp3.Request originalRequest = chain.request();
         okhttp3.Request requestWithUserAgent = originalRequest.newBuilder()
-          .header("Accept-Language",
-              "en")
-          .header("User-Agent",
-              String.format("GuardianSDK/%s Android %s",
-                "1.0",
-                "21"))
-          .header("Auth0-Client", clientInfo)
-          .build();
+            .header("Accept-Language",
+                "en")
+            .header("User-Agent",
+                String.format("GuardianSDK/%s Android %s",
+                    "1.0",
+                    "21"))
+            .header("Auth0-Client", clientInfo)
+            .build();
         return chain.proceed(requestWithUserAgent);
       }
     });
 
     OkHttpClient client = builder.build();
 
-    Gson gson = new GsonBuilder().create();
+    RequestFactory requestFactory = new RequestFactory(JSON, client);
 
-    RequestFactory requestFactory = new RequestFactory(gson, client);
-
-    GuardianAPIClient guardianAPIClient = (GuardianAPIClient) guardianApiClientConstructor.newInstance(requestFactory, url);
+    GuardianAPIClient guardianAPIClient = (GuardianAPIClient) guardianApiClientConstructor.newInstance(requestFactory,
+        url);
     return guardianAPIClient;
   }
 
@@ -135,14 +151,14 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
       guardian = (Guardian) guardianConstructor.newInstance(buildGuardianApiClient(domain));
       Log.d(TAG, "Builder complete");
 
-      enrollment = getEnrollment();
-      if (enrollment != null) {
-        Log.i(TAG, enrollment.toJSON());
+      enrollments = getEnrollments();
+      if (enrollments != null) {
+        Log.i(TAG, JSON.toJson(enrollments));
       } else {
         Log.i(TAG, "Enrollment is empty");
       }
       promise.resolve(true);
-    } catch (Exception err){
+    } catch (Exception err) {
       promise.reject(err);
     }
   }
@@ -165,7 +181,7 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
-  public void enroll(String enrollmentURI, String FCMToken, final Promise promise){
+  public void enroll(String enrollmentURI, String FCMToken, final Promise promise) {
     Log.i(TAG, "ENROLL ATTEMPTED");
     String deviceName = android.os.Build.MODEL;
     Log.i(TAG, "DEVICE MODEL: " + deviceName);
@@ -173,26 +189,26 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
     Log.i(TAG, "DEVICE CONTEXT ESTABLISHED");
     try {
       KeyPair keyPair = generateKeyPair();
-      if(keyPair != null) {
+      if (keyPair != null) {
         guardian
-          .enroll(enrollmentURI, device, keyPair)
-          .start(new Callback<Enrollment>() {
-            @Override
-            public void onSuccess(Enrollment response) {
-              Log.i(TAG, "ENROLLED SUCCESSFULLY!");
-              promise.resolve(response.getSecret());
-              saveEnrollment(response);
-            }
+            .enroll(enrollmentURI, device, keyPair)
+            .start(new Callback<Enrollment>() {
+              @Override
+              public void onSuccess(Enrollment response) {
+                Log.i(TAG, "ENROLLED SUCCESSFULLY!");
+                saveEnrollment(response);
+                promise.resolve(response);
+              }
 
-            @Override
-            public void onFailure(Throwable exception) {
-              Log.i(TAG, "ENROLL FAILED!");
-              promise.reject(exception);
-            }
-          });
+              @Override
+              public void onFailure(Throwable exception) {
+                Log.i(TAG, "ENROLL FAILED!");
+                promise.reject(exception);
+              }
+            });
       }
 
-    } catch (Exception err){
+    } catch (Exception err) {
       promise.reject(err);
       Log.e(TAG, "ENROLLMENT EXCEPTION", err);
     }
@@ -200,46 +216,48 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
   }
 
   @ReactMethod
-  public void getTOTP(Promise promise){
+  public void getTOTP(String enrollmentId, Promise promise) {
     try {
-      if(enrollment != null){
+
+      ParcelableEnrollment enrollment = getEnrollment(enrollmentId);
+      if (enrollment != null) {
         String totpCode = Guardian.getOTPCode(enrollment);
         promise.resolve(totpCode);
       } else {
         promise.reject(DEVICE_NOT_ENROLLED_EXCEPTION);
       }
-    } catch (Exception err){
+    } catch (Exception err) {
       promise.reject(err);
     }
   }
-
 
   @ReactMethod
   public void allow(ReadableMap data, final Promise promise) {
     Map parsedData = MapUtil.toMap(data);
     ParcelableNotification notification = Guardian.parseNotification(parsedData);
+    ParcelableEnrollment enrollment = getEnrollment(enrollmentId);
     try {
 
-      if(enrollment != null) {
+      if (enrollment != null) {
         guardian
-          .allow(notification, enrollment)
-          .start(new Callback<Void>() {
-            @Override
-            public void onSuccess(Void response) {
-              Log.i(TAG, "ALLOWED SUCCESSFULLY");
-              promise.resolve(true);
-            }
+            .allow(notification, enrollment)
+            .start(new Callback<Void>() {
+              @Override
+              public void onSuccess(Void response) {
+                Log.i(TAG, "ALLOWED SUCCESSFULLY");
+                promise.resolve(true);
+              }
 
-            @Override
-            public void onFailure(Throwable exception) {
-              Log.e(TAG, "ALLOW FAILED!", exception);
-              promise.reject(exception);
-            }
-          });
+              @Override
+              public void onFailure(Throwable exception) {
+                Log.e(TAG, "ALLOW FAILED!", exception);
+                promise.reject(exception);
+              }
+            });
       } else {
         promise.reject(DEVICE_NOT_ENROLLED_EXCEPTION);
       }
-    } catch (Exception err){
+    } catch (Exception err) {
       Log.e(TAG, "ALLOW FAILED!", err);
       promise.reject(err);
     }
@@ -250,51 +268,53 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
     try {
       Map parsedData = MapUtil.toMap(data);
       Notification notification = Guardian.parseNotification(parsedData);
+      ParcelableEnrollment enrollment = getEnrollment(enrollmentId);
 
-      if(enrollment != null) {
+      if (enrollment != null) {
         guardian
-          .reject(notification, enrollment)
-          .start(new Callback<Void>() {
-            @Override
-            public void onSuccess(Void response) {
-              Log.i(TAG, "REJECTED SUCCESSFULLY");
-              promise.resolve(true);
-            }
+            .reject(notification, enrollment)
+            .start(new Callback<Void>() {
+              @Override
+              public void onSuccess(Void response) {
+                Log.i(TAG, "REJECTED SUCCESSFULLY");
+                promise.resolve(true);
+              }
 
-            @Override
-            public void onFailure(Throwable exception) {
-              Log.e(TAG, "REJECT FAILED!", exception);
-              promise.reject(exception);
-            }
-          });
+              @Override
+              public void onFailure(Throwable exception) {
+                Log.e(TAG, "REJECT FAILED!", exception);
+                promise.reject(exception);
+              }
+            });
       } else {
         promise.reject(DEVICE_NOT_ENROLLED_EXCEPTION);
       }
-    } catch (Exception err){
+    } catch (Exception err) {
       Log.e(TAG, "REJECT FAILED!", err);
       promise.reject(err);
     }
   }
 
   @ReactMethod
-  public void unenroll(final Promise promise){
+  public void unenroll(String enrollmentId, final Promise promise) {
     try {
-      if(enrollment != null){
+      ParcelableEnrollment enrollment = getEnrollment(enrollmentId);
+      if (enrollment != null) {
         guardian
-          .delete(enrollment)
-          .start(new Callback<Void>() {
-            @Override
-            public void onSuccess(Void response) {
-              Log.i(TAG, "UNENROLLED SUCCESSFULLY");
-              promise.resolve(true);
-            }
+            .delete(enrollment)
+            .start(new Callback<Void>() {
+              @Override
+              public void onSuccess(Void response) {
+                Log.i(TAG, "UNENROLLED SUCCESSFULLY");
+                promise.resolve(true);
+              }
 
-            @Override
-            public void onFailure(Throwable exception) {
-              Log.e(TAG, "UNENROLL FAILED!", exception);
-              promise.reject(exception);
-            }
-          });
+              @Override
+              public void onFailure(Throwable exception) {
+                Log.e(TAG, "UNENROLL FAILED!", exception);
+                promise.reject(exception);
+              }
+            });
       } else {
         promise.reject(DEVICE_NOT_ENROLLED_EXCEPTION);
       }
