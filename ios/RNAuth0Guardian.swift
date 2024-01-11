@@ -136,7 +136,7 @@ class RNAuth0Guardian: NSObject {
     }
     
     @objc
-    func getEnrollments(resolver resolve: RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock){
+    func getEnrollments(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping  RCTPromiseRejectBlock){
         do{
             let encoder = JSONEncoder()
             let encoded = try encoder.encode(self.customEnrolledDevice)
@@ -158,18 +158,22 @@ class RNAuth0Guardian: NSObject {
             do {
                 let signingKey = try KeychainRSAPrivateKey.new(with: bundleID!)
                 self.signingKey = signingKey
-                 if let retrievedData = UserDefaults.standard.retrieve(object: [CustomEnrolledDevice].self, fromKey: ENROLLED_DEVICE) ?? nil {
-                     self.customEnrolledDevice = retrievedData
-                     
-                     self.enrolledDevice = self.customEnrolledDevice!.map {customEnrollment in
-                         var totp: OTPParameters? = nil
-                         if customEnrollment.secret != nil {
-                             totp = OTPParameters(base32Secret: customEnrollment.secret!, algorithm: customEnrollment.algorithm, digits: customEnrollment.digits, period: customEnrollment.period)
-                         }
-                         return EnrolledDevice(id: customEnrollment.id, userId: customEnrollment.userId, deviceToken: customEnrollment.deviceToken, notificationToken: customEnrollment.notificationToken, signingKey: signingKey, totp: totp
-                         )
-                     }
-                 }
+                var retrievedData = UserDefaults.standard.retrieve(object: [CustomEnrolledDevice].self, fromKey: ENROLLED_DEVICE) ?? nil
+                
+                if retrievedData == nil {
+                    retrievedData = [CustomEnrolledDevice]()
+                }
+                
+                self.customEnrolledDevice = retrievedData
+                
+                self.enrolledDevice = self.customEnrolledDevice!.map {customEnrollment in
+                    var totp: OTPParameters? = nil
+                    if customEnrollment.secret != nil {
+                        totp = OTPParameters(base32Secret: customEnrollment.secret!, algorithm: customEnrollment.algorithm, digits: customEnrollment.digits, period: customEnrollment.period)
+                    }
+                    return EnrolledDevice(id: customEnrollment.id, userId: customEnrollment.userId, deviceToken: customEnrollment.deviceToken, notificationToken: customEnrollment.notificationToken, signingKey: signingKey, totp: totp
+                    )
+                }
                 
                 resolve(true)
             } catch {
@@ -217,12 +221,17 @@ class RNAuth0Guardian: NSObject {
                 switch result {
                 case .success(let enrolledDevice):
                     self.enrolledDevice?.append(enrolledDevice);
-                    let customEnrollment = CustomEnrolledDevice(id: enrolledDevice.id, userId: enrolledDevice.userId, deviceToken: enrolledDevice.deviceToken, notificationToken: enrolledDevice.notificationToken, secret: enrolledDevice.totp?.base32Secret, algorithm: enrolledDevice.totp?.algorithm,  period: enrolledDevice.totp?.period, digits: enrolledDevice.totp?.digits
+                    let customEnrollment = CustomEnrolledDevice(id: enrolledDevice.id, userId: enrolledDevice.userId, deviceToken: enrolledDevice.deviceToken, notificationToken: enrolledDevice.notificationToken, secret: enrolledDevice.totp?.base32Secret, algorithm: enrolledDevice.totp?.algorithm,  digits: enrolledDevice.totp?.digits, period: enrolledDevice.totp?.period
                     )
                     self.customEnrolledDevice?.append(customEnrollment);
                     UserDefaults.standard.save(customObject: self.customEnrolledDevice, inKey: self.ENROLLED_DEVICE)
-
-                    resolve(customEnrollment.asJSONObject())
+                    do{
+                        let jsonObject = try customEnrollment.asJSONObject()
+                        resolve(jsonObject)
+                    }catch{
+                        reject("ENROLLMENT_FAILED", "Enrollment failed", error)
+                    }
+                    
                     break
                 case .failure(let cause):
                     print("ENROLL FAILED: ", cause)
@@ -257,7 +266,7 @@ class RNAuth0Guardian: NSObject {
                       }
                 }else{
                     print("ALLOW FAILED!", "Could not find enrollment")
-                    reject("ALLOW_FAILED", "Allow failed!", "Could not find enrollment")
+                    reject("ALLOW_FAILED", "Allow failed!", "Could not find enrollment" as! Error)
                 }
               
             } else {
@@ -288,7 +297,7 @@ class RNAuth0Guardian: NSObject {
                     }
             }else{
                 print("REJECT FAILED!", "Could not find enrollment")
-                reject("REJECT_FAILED", "Reject failed!", "Could not find enrollment")
+                reject("REJECT_FAILED", "Reject failed!", "Could not find enrollment" as! Error)
             }
             
         } else {
@@ -306,8 +315,8 @@ class RNAuth0Guardian: NSObject {
                 .start { result in
                     switch result {
                     case .success:
-                        self.enrolledDevice?.removeAll(where: {$0.id == enrollment?.id})
-                        self.customEnrolledDevice?.removeAll(where: {$0.id == enrollment?.id})
+                        self.enrolledDevice?.removeAll(where: {$0.id == enrollment.id})
+                        self.customEnrolledDevice?.removeAll(where: {$0.id == enrollment.id})
                         UserDefaults.standard.save(customObject: self.customEnrolledDevice, inKey: self.ENROLLED_DEVICE)
                       resolve(true)
                       break
@@ -319,7 +328,7 @@ class RNAuth0Guardian: NSObject {
                 }
         }else{
             print("UNENROLL FAILED!", "Could not find enrollment")
-            reject("UNENROLL_FAILED", "Unenroll failed!", "Could not find enrollment")
+            reject("UNENROLL_FAILED", "Unenroll failed!", "Could not find enrollment" as! Error)
         }
         
     }
