@@ -17,7 +17,7 @@ Pod::Spec.new do |s|
   s.preserve_paths = 'LICENSE', 'README.md', 'package.json', 'index.js'
 
   s.dependency "React"
-  s.dependency "Guardian", ">= 1.0.0"
+  s.dependency "Guardian", ">= 1.2.0"
   #s.dependency "others"
 
 end
