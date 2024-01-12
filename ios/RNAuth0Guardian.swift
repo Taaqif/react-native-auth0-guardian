@@ -143,7 +143,7 @@ class RNAuth0Guardian: NSObject {
             let jsonObject = try JSONSerialization.jsonObject(with: encoded, options: [])
             resolve(jsonObject)
         }catch{
-            reject("SIGNING_KEY", "SigningKey generation failed", error)
+            reject("ENROLLMENTS_ERROR", "Could not get enrollments", error)
         }
     }
     
@@ -266,7 +266,7 @@ class RNAuth0Guardian: NSObject {
                       }
                 }else{
                     print("ALLOW FAILED!", "Could not find enrollment")
-                    reject("ALLOW_FAILED", "Allow failed!", "Could not find enrollment" as! Error)
+                    reject("ALLOW_FAILED", "Allow failed! Could not find enrollment", nil)
                 }
               
             } else {
@@ -297,7 +297,7 @@ class RNAuth0Guardian: NSObject {
                     }
             }else{
                 print("REJECT FAILED!", "Could not find enrollment")
-                reject("REJECT_FAILED", "Reject failed!", "Could not find enrollment" as! Error)
+                reject("REJECT_FAILED", "Reject failed! Could not find enrollment", nil)
             }
             
         } else {
@@ -328,7 +328,7 @@ class RNAuth0Guardian: NSObject {
                 }
         }else{
             print("UNENROLL FAILED!", "Could not find enrollment")
-            reject("UNENROLL_FAILED", "Unenroll failed!", "Could not find enrollment" as! Error)
+            reject("UNENROLL_FAILED", "Unenroll failed! Could not find enrollment", nil)
         }
         
     }
