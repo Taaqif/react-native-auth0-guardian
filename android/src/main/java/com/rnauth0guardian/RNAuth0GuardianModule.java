@@ -12,9 +12,11 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 
 import android.content.SharedPreferences;
+import android.os.Build;
 import android.util.Log;
 import android.util.Base64;
 
+import com.auth0.android.guardian.sdk.BuildConfig;
 import com.auth0.android.guardian.sdk.CurrentDevice;
 import com.auth0.android.guardian.sdk.Enrollment;
 import com.auth0.android.guardian.sdk.Notification;
@@ -84,7 +86,7 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
     if (enrollmentId != null && !enrollmentId.trim().isEmpty()) {
       enrollment = enrollments.stream().filter(e -> e.getId().equals(enrollmentId)).findFirst().orElse(null);
     }else if (enrollments.size() == 1){
-      enrollments.stream().findFirst();
+      enrollment = enrollments.stream().findFirst().orElse(null);
     }
     return enrollment;
 
@@ -95,11 +97,12 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
     enrollments.add(data);
     String json = JSON.toJson(enrollments);
     prefsEditor.putString(ENROLLMENTS, json);
-    prefsEditor.commit();
+    prefsEditor.apply();
   }
 
   private GuardianAPIClient buildGuardianApiClient(String domain) throws Exception {
-    // reflect to make access the constructor
+    // reflect to access the constructor publicly
+    // workaround to a bug with Auth0 Android Guardian sdk
     Class<?> guardianApiClientClass = Class.forName("com.auth0.android.guardian.sdk.GuardianAPIClient");
     Constructor<?> guardianApiClientConstructor = guardianApiClientClass.getDeclaredConstructor(RequestFactory.class,
             HttpUrl.class);
@@ -111,7 +114,7 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
 
     final String clientInfo = Base64.encodeToString(
             String.format("{\"name\":\"Guardian.Android\",\"version\":\"%s\"}",
-                    "1.0").getBytes(),
+                    BuildConfig.VERSION_NAME).getBytes(),
             Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING);
 
     builder.addInterceptor(new Interceptor() {
@@ -124,8 +127,8 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
                         "en")
                 .header("User-Agent",
                         String.format("GuardianSDK/%s Android %s",
-                                "1.0",
-                                "21"))
+                                BuildConfig.VERSION_NAME,
+                                Build.VERSION.RELEASE))
                 .header("Auth0-Client", clientInfo)
                 .build();
         return chain.proceed(requestWithUserAgent);
@@ -145,7 +148,8 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
   public void initialize(String domain, Promise promise) {
     Log.i(TAG, "Initialized attempted:" + domain);
     try {
-      // reflect to make access the constructor
+      // reflect to access the constructor publicly
+      // workaround to a bug with Auth0 Android Guardian sdk
       Class<?> guardianClass = Class.forName("com.auth0.android.guardian.sdk.Guardian");
       Constructor<?> guardianConstructor = guardianClass.getDeclaredConstructor(GuardianAPIClient.class);
       guardianConstructor.setAccessible(true);
@@ -293,6 +297,7 @@ public class RNAuth0GuardianModule extends ReactContextBaseJavaModule {
     try {
       Map parsedData = MapUtil.toMap(data);
       Notification notification = Guardian.parseNotification(parsedData);
+      assert notification != null;
       ParcelableEnrollment enrollment = getEnrollment(notification.getEnrollmentId());
 
       if (enrollment != null) {
