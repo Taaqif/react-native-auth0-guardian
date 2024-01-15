@@ -12,28 +12,49 @@ struct CustomEnrolledDevice: Codable {
   public let id: String
   public let userId: String
   public let deviceToken: String
+  public let deviceIdentifier: String
+  public let deviceName: String
   public let notificationToken: String
-  public let totp: OTPParameters?
+  public let secret: String?
+  public let algorithm: HMACAlgorithm?
+  public let digits: Int?
+  public let period: Int?
 
   public init(
        id: String,
        userId: String,
        deviceToken: String,
+       deviceIdentifer: String,
+       deviceName: String,
        notificationToken: String,
-       totp: OTPParameters? = nil
+       secret: String? = nil,
+       algorithm: HMACAlgorithm? = nil,
+       digits: Int? = nil,
+       period: Int? = nil
       ) {
       self.id = id
       self.userId = userId
       self.deviceToken = deviceToken
+      self.deviceIdentifier = deviceIdentifer
+      self.deviceName = deviceName
       self.notificationToken = notificationToken
-      self.totp = totp
+      self.secret = secret
+      self.algorithm = algorithm
+      self.digits = digits
+      self.period = period
+      
   }
   enum CodingKeys: String, CodingKey {
       case id
       case userId
       case deviceToken
+      case deviceIdentifier
+      case deviceName
       case notificationToken
-      case totp
+      case secret
+      case algorithm
+      case digits
+      case period
   }
 
   init(from decoder: Decoder) throws {
@@ -41,8 +62,13 @@ struct CustomEnrolledDevice: Codable {
       id = try container.decode(String.self, forKey: .id)
       userId = try container.decode(String.self, forKey: .userId)
       deviceToken = try container.decode(String.self, forKey: .deviceToken)
+      deviceIdentifier = try container.decode(String.self, forKey: .deviceIdentifier)
+      deviceName = try container.decode(String.self, forKey: .deviceName)
       notificationToken = try container.decode(String.self, forKey: .notificationToken)
-      totp = try container.decode(OTPParameters.self, forKey: .totp)
+      secret = try container.decode(String.self, forKey: .secret)
+      algorithm = try container.decode(HMACAlgorithm.self, forKey: .algorithm)
+      digits = try container.decode(Int.self, forKey: .digits)
+      period = try container.decode(Int.self, forKey: .period)
   }
 
     func encode(to encoder: Encoder) throws {
@@ -50,8 +76,24 @@ struct CustomEnrolledDevice: Codable {
       try container.encode(id, forKey: .id)
       try container.encode(userId, forKey: .userId)
       try container.encode(deviceToken, forKey: .deviceToken)
+      try container.encode(deviceIdentifier, forKey: .deviceIdentifier)
+      try container.encode(deviceName, forKey: .deviceName)
       try container.encode(notificationToken, forKey: .notificationToken)
-      try container.encode(totp, forKey: .totp)
+      try container.encode(secret, forKey: .secret)
+      try container.encode(algorithm, forKey: .algorithm)
+      try container.encode(digits, forKey: .digits)
+      try container.encode(period, forKey: .period)
+    }
+    
+                           
+    func asDictionary() throws -> [String: Any] {
+      let encoder = JSONEncoder()
+      let encoded = try encoder.encode(self)
+      let jsonObject = try JSONSerialization.jsonObject(with: encoded, options: [])
+      guard let dictionary = jsonObject as? [String: Any] else {
+          throw EncodingError.invalidValue(jsonObject, EncodingError.Context(codingPath: [], debugDescription: "Could not convert to dictionary"))
+      }
+      return dictionary
     }
 }
 
@@ -90,13 +132,37 @@ class RNAuth0Guardian: NSObject {
     let ENROLLED_DEVICE = "ENROLLED_DEVICE"
     
     var domain: String?
-    var enrolledDevice: EnrolledDevice?
+    var enrolledDevice: [EnrolledDevice]?
+    var customEnrolledDevice: [CustomEnrolledDevice]?
     var signingKey: KeychainRSAPrivateKey?
     
   
     override init() {
         super.init()
     }
+    
+    func getEnrollment(_ enrollmentId: String?) -> EnrolledDevice?{
+        var enrollment: EnrolledDevice? = nil;
+        if let unwrapped = enrollmentId, !unwrapped.isEmpty {
+            enrollment = self.enrolledDevice?.first(where: {$0.id == enrollmentId})
+        }else{
+            enrollment = self.enrolledDevice?.first
+        }
+        return enrollment;
+    }
+    
+    @objc
+    func getEnrollments(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping  RCTPromiseRejectBlock){
+        do{
+            let encoder = JSONEncoder()
+            let encoded = try encoder.encode(self.customEnrolledDevice)
+            let jsonObject = try JSONSerialization.jsonObject(with: encoded, options: [])
+            resolve(jsonObject)
+        }catch{
+            reject("ENROLLMENTS_ERROR", "Could not get enrollments", error)
+        }
+    }
+    
     @objc
     func initialize(_ auth0Domain: NSString,  resolver resolve: RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock) {
         let domain = auth0Domain as String
@@ -108,12 +174,22 @@ class RNAuth0Guardian: NSObject {
             do {
                 let signingKey = try KeychainRSAPrivateKey.new(with: bundleID!)
                 self.signingKey = signingKey
-                 if let retrievedData = UserDefaults.standard.retrieve(object: CustomEnrolledDevice.self, fromKey: ENROLLED_DEVICE) ?? nil {
-                     let enrolledDevice = EnrolledDevice(id: retrievedData.id, userId: retrievedData.userId, deviceToken: retrievedData.deviceToken, notificationToken: retrievedData.notificationToken, signingKey: signingKey, totp: retrievedData.totp
-                        )
-                     self.enrolledDevice = enrolledDevice;
-                     
-                 }
+                var retrievedData = UserDefaults.standard.retrieve(object: [CustomEnrolledDevice].self, fromKey: ENROLLED_DEVICE) ?? nil
+                
+                if retrievedData == nil {
+                    retrievedData = [CustomEnrolledDevice]()
+                }
+                
+                self.customEnrolledDevice = retrievedData
+                
+                self.enrolledDevice = self.customEnrolledDevice!.map {customEnrollment in
+                    var totp: OTPParameters? = nil
+                    if customEnrollment.secret != nil {
+                        totp = OTPParameters(base32Secret: customEnrollment.secret!, algorithm: customEnrollment.algorithm, digits: customEnrollment.digits, period: customEnrollment.period)
+                    }
+                    return EnrolledDevice(id: customEnrollment.id, userId: customEnrollment.userId, deviceToken: customEnrollment.deviceToken, notificationToken: customEnrollment.notificationToken, signingKey: signingKey, totp: totp
+                    )
+                }
                 
                 resolve(true)
             } catch {
@@ -122,9 +198,10 @@ class RNAuth0Guardian: NSObject {
         }
     }
     @objc
-    func getTOTP(_ resolve: RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock){
-        if (self.enrolledDevice != nil) {
-            let totpInt: Int = try! Guardian.totp(parameters: self.enrolledDevice!.totp!).code();
+    func getTOTP(_ enrollmentId: NSString?, resolve: RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock){
+        
+        if let enrollment = getEnrollment(enrollmentId as String?) {
+            let totpInt: Int = try! Guardian.totp(parameters: enrollment.totp!).code();
             var totpString = String(totpInt)
             if(totpString.isEmpty == false && totpString.count <= 5) {
                 for _ in 1...6 - totpString.count {
@@ -141,6 +218,8 @@ class RNAuth0Guardian: NSObject {
     func enroll(_ enrollmentURI: NSString, deviceToken: NSString, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock){
         let enrollmentUri = enrollmentURI as String
         let deviceTokenString = deviceToken as String
+        let deviceIdentifier = UIDevice.current.identifierForVendor!.uuidString
+        let deviceName = UIDevice.current.name
         do {
           let verificationKey = try signingKey!.verificationKey()
           
@@ -159,12 +238,18 @@ class RNAuth0Guardian: NSObject {
             .start { result in
                 switch result {
                 case .success(let enrolledDevice):
-                    self.enrolledDevice = enrolledDevice;
-                    let clonedData = CustomEnrolledDevice(id: enrolledDevice.id, userId: enrolledDevice.userId, deviceToken: enrolledDevice.deviceToken, notificationToken: enrolledDevice.notificationToken, totp: enrolledDevice.totp
+                    self.enrolledDevice?.append(enrolledDevice);
+                    let customEnrollment = CustomEnrolledDevice(id: enrolledDevice.id, userId: enrolledDevice.userId, deviceToken: enrolledDevice.deviceToken, deviceIdentifer: deviceIdentifier, deviceName: deviceName, notificationToken: enrolledDevice.notificationToken, secret: enrolledDevice.totp?.base32Secret, algorithm: enrolledDevice.totp?.algorithm,  digits: enrolledDevice.totp?.digits, period: enrolledDevice.totp?.period
                     )
-                    UserDefaults.standard.save(customObject: clonedData, inKey: self.ENROLLED_DEVICE)
-
-                    resolve(enrolledDevice.totp?.base32Secret)
+                    self.customEnrolledDevice?.append(customEnrollment);
+                    UserDefaults.standard.save(customObject: self.customEnrolledDevice, inKey: self.ENROLLED_DEVICE)
+                    do{
+                        let jsonObject = try customEnrollment.asDictionary()
+                        resolve(jsonObject)
+                    }catch{
+                        reject("ENROLLMENT_FAILED", "Enrollment failed", error)
+                    }
+                    
                     break
                 case .failure(let cause):
                     print("ENROLL FAILED: ", cause)
@@ -182,20 +267,26 @@ class RNAuth0Guardian: NSObject {
     func allow(_ userInfo: NSDictionary, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock){
         if (self.enrolledDevice != nil) {
             if let notification = Guardian.notification(from: userInfo as! [AnyHashable : Any]) {
-              Guardian
-                .authentication(forDomain: self.domain!, device: self.enrolledDevice!)
-                .allow(notification: notification)
-                .start { result in
-                  switch result {
-                  case .success:
-                    resolve(true)
-                    break
-                  case .failure(let cause):
-                    print("ALLOW FAILED!", cause)
-                    reject("ALLOW_FAILED", "Allow failed", cause)
-                    break
-                  }
+                if let enrollment = getEnrollment(notification.enrollmentId){
+                    Guardian
+                      .authentication(forDomain: self.domain!, device: enrollment)
+                      .allow(notification: notification)
+                      .start { result in
+                        switch result {
+                        case .success:
+                          resolve(true)
+                          break
+                        case .failure(let cause):
+                          print("ALLOW FAILED!", cause)
+                          reject("ALLOW_FAILED", "Allow failed", cause)
+                          break
+                        }
+                      }
+                }else{
+                    print("ALLOW FAILED!", "Could not find enrollment")
+                    reject("ALLOW_FAILED", "Allow failed! Could not find enrollment", nil)
                 }
+              
             } else {
                  reject("NOTIFICATION_NULL", "Notification is not provided yet!", nil)
             }
@@ -207,42 +298,57 @@ class RNAuth0Guardian: NSObject {
     @objc
     func reject(_ userInfo: [AnyHashable : Any], resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         if let notification = Guardian.notification(from: userInfo) {
-            Guardian
-                .authentication(forDomain: self.domain!, device: self.enrolledDevice!)
-                .reject(notification: notification)
-                .start { result in
-                     switch result {
-                         case .success:
-                           resolve(true)
-                           break
-                         case .failure(let cause):
-                           print("REJECT FAILED!", cause)
-                           reject("REJECT_FAILED", "Reject failed!" ,cause)
-                           break
-                     }
-                }
+            if let enrollment = getEnrollment(notification.enrollmentId){
+                Guardian
+                    .authentication(forDomain: self.domain!, device: enrollment)
+                    .reject(notification: notification)
+                    .start { result in
+                         switch result {
+                             case .success:
+                               resolve(true)
+                               break
+                             case .failure(let cause):
+                               print("REJECT FAILED!", cause)
+                               reject("REJECT_FAILED", "Reject failed!" ,cause)
+                               break
+                         }
+                    }
+            }else{
+                print("REJECT FAILED!", "Could not find enrollment")
+                reject("REJECT_FAILED", "Reject failed! Could not find enrollment", nil)
+            }
+            
         } else {
              reject("NOTIFICATION_NULL", "Notification is not provided yet!", nil)
         }
     }
   
     @objc
-    func unenroll(_ resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
-        Guardian
-            .api(forDomain: self.domain!)
-            .device(forEnrollmentId: self.enrolledDevice!.id, token: self.enrolledDevice!.deviceToken)
-            .delete()
-            .start { result in
-                switch result {
-                case .success:
-                  resolve(true)
-                  break
-                case .failure(let cause):
-                  print("UNENROLL FAILED!", cause)
-                  reject("UNENROLL_FAILED", "Unenroll failed!", cause)
-                  break
+    func unenroll(_ enrollmentId: NSString?, resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+        if let enrollment = getEnrollment(enrollmentId as String?){
+            Guardian
+                .api(forDomain: self.domain!)
+                .device(forEnrollmentId: enrollment.id, token: enrollment.deviceToken)
+                .delete()
+                .start { result in
+                    switch result {
+                    case .success:
+                        self.enrolledDevice?.removeAll(where: {$0.id == enrollment.id})
+                        self.customEnrolledDevice?.removeAll(where: {$0.id == enrollment.id})
+                        UserDefaults.standard.save(customObject: self.customEnrolledDevice, inKey: self.ENROLLED_DEVICE)
+                      resolve(true)
+                      break
+                    case .failure(let cause):
+                      print("UNENROLL FAILED!", cause)
+                      reject("UNENROLL_FAILED", "Unenroll failed!", cause)
+                      break
+                    }
                 }
-            }
+        }else{
+            print("UNENROLL FAILED!", "Could not find enrollment")
+            reject("UNENROLL_FAILED", "Unenroll failed! Could not find enrollment", nil)
+        }
+        
     }
   
     @objc
@@ -250,4 +356,5 @@ class RNAuth0Guardian: NSObject {
         return true
     }
 }
+
 
