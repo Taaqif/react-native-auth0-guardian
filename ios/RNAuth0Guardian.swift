@@ -12,6 +12,8 @@ struct CustomEnrolledDevice: Codable {
   public let id: String
   public let userId: String
   public let deviceToken: String
+  public let deviceIdentifier: String
+  public let deviceName: String
   public let notificationToken: String
   public let secret: String?
   public let algorithm: HMACAlgorithm?
@@ -22,6 +24,8 @@ struct CustomEnrolledDevice: Codable {
        id: String,
        userId: String,
        deviceToken: String,
+       deviceIdentifer: String,
+       deviceName: String,
        notificationToken: String,
        secret: String? = nil,
        algorithm: HMACAlgorithm? = nil,
@@ -31,6 +35,8 @@ struct CustomEnrolledDevice: Codable {
       self.id = id
       self.userId = userId
       self.deviceToken = deviceToken
+      self.deviceIdentifier = deviceIdentifer
+      self.deviceName = deviceName
       self.notificationToken = notificationToken
       self.secret = secret
       self.algorithm = algorithm
@@ -42,6 +48,8 @@ struct CustomEnrolledDevice: Codable {
       case id
       case userId
       case deviceToken
+      case deviceIdentifier
+      case deviceName
       case notificationToken
       case secret
       case algorithm
@@ -54,6 +62,8 @@ struct CustomEnrolledDevice: Codable {
       id = try container.decode(String.self, forKey: .id)
       userId = try container.decode(String.self, forKey: .userId)
       deviceToken = try container.decode(String.self, forKey: .deviceToken)
+      deviceIdentifier = try container.decode(String.self, forKey: .deviceIdentifier)
+      deviceName = try container.decode(String.self, forKey: .deviceName)
       notificationToken = try container.decode(String.self, forKey: .notificationToken)
       secret = try container.decode(String.self, forKey: .secret)
       algorithm = try container.decode(HMACAlgorithm.self, forKey: .algorithm)
@@ -66,6 +76,8 @@ struct CustomEnrolledDevice: Codable {
       try container.encode(id, forKey: .id)
       try container.encode(userId, forKey: .userId)
       try container.encode(deviceToken, forKey: .deviceToken)
+      try container.encode(deviceIdentifier, forKey: .deviceIdentifier)
+      try container.encode(deviceName, forKey: .deviceName)
       try container.encode(notificationToken, forKey: .notificationToken)
       try container.encode(secret, forKey: .secret)
       try container.encode(algorithm, forKey: .algorithm)
@@ -73,11 +85,15 @@ struct CustomEnrolledDevice: Codable {
       try container.encode(period, forKey: .period)
     }
     
-    func asJSONObject() throws -> Any  {
-        let encoder = JSONEncoder()
-        let encoded = try encoder.encode(self)
-        let jsonObject = try JSONSerialization.jsonObject(with: encoded, options: [])
-        return jsonObject
+                           
+    func asDictionary() throws -> [String: Any] {
+      let encoder = JSONEncoder()
+      let encoded = try encoder.encode(self)
+      let jsonObject = try JSONSerialization.jsonObject(with: encoded, options: [])
+      guard let dictionary = jsonObject as? [String: Any] else {
+          throw EncodingError.invalidValue(jsonObject, EncodingError.Context(codingPath: [], debugDescription: "Could not convert to dictionary"))
+      }
+      return dictionary
     }
 }
 
@@ -202,6 +218,8 @@ class RNAuth0Guardian: NSObject {
     func enroll(_ enrollmentURI: NSString, deviceToken: NSString, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock){
         let enrollmentUri = enrollmentURI as String
         let deviceTokenString = deviceToken as String
+        let deviceIdentifier = UIDevice.current.identifierForVendor!.uuidString
+        let deviceName = UIDevice.current.name
         do {
           let verificationKey = try signingKey!.verificationKey()
           
@@ -221,12 +239,12 @@ class RNAuth0Guardian: NSObject {
                 switch result {
                 case .success(let enrolledDevice):
                     self.enrolledDevice?.append(enrolledDevice);
-                    let customEnrollment = CustomEnrolledDevice(id: enrolledDevice.id, userId: enrolledDevice.userId, deviceToken: enrolledDevice.deviceToken, notificationToken: enrolledDevice.notificationToken, secret: enrolledDevice.totp?.base32Secret, algorithm: enrolledDevice.totp?.algorithm,  digits: enrolledDevice.totp?.digits, period: enrolledDevice.totp?.period
+                    let customEnrollment = CustomEnrolledDevice(id: enrolledDevice.id, userId: enrolledDevice.userId, deviceToken: enrolledDevice.deviceToken, deviceIdentifer: deviceIdentifier, deviceName: deviceName, notificationToken: enrolledDevice.notificationToken, secret: enrolledDevice.totp?.base32Secret, algorithm: enrolledDevice.totp?.algorithm,  digits: enrolledDevice.totp?.digits, period: enrolledDevice.totp?.period
                     )
                     self.customEnrolledDevice?.append(customEnrollment);
                     UserDefaults.standard.save(customObject: self.customEnrolledDevice, inKey: self.ENROLLED_DEVICE)
                     do{
-                        let jsonObject = try customEnrollment.asJSONObject()
+                        let jsonObject = try customEnrollment.asDictionary()
                         resolve(jsonObject)
                     }catch{
                         reject("ENROLLMENT_FAILED", "Enrollment failed", error)
@@ -338,4 +356,5 @@ class RNAuth0Guardian: NSObject {
         return true
     }
 }
+
 
