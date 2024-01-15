@@ -13,7 +13,7 @@ RCT_EXTERN_METHOD(getTOTP:(NSString *)enrollmentId resolver:(RCTPromiseResolveBl
 
 RCT_EXTERN_METHOD(allow:(NSDictionary *)userInfo resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 RCT_EXTERN_METHOD(reject:(NSDictionary *)userInfo resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
-RCT_EXTERN_METHOD(unenroll::(NSString *)enrollmentId resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXTERN_METHOD(unenroll:(NSString *)enrollmentId resolver:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject)
 
 @end
   
