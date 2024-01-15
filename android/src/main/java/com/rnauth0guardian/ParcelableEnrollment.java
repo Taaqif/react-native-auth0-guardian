@@ -7,6 +7,8 @@ import android.util.Base64;
 
 
 import com.auth0.android.guardian.sdk.Enrollment;
+import com.facebook.react.bridge.Arguments;
+import com.facebook.react.bridge.WritableMap;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.annotations.SerializedName;
@@ -192,4 +194,22 @@ public class ParcelableEnrollment implements Enrollment, Parcelable {
     }
 
     private static final Gson JSON = new GsonBuilder().create();
+
+    public WritableMap toWritableMap() {
+        WritableMap map = Arguments.createMap();
+
+        map.putString("id", id);
+        map.putString("userId", userId);
+        map.putInt("period", period);
+        map.putInt("digits", digits);
+        map.putString("algorithm", algorithm);
+        map.putString("secret", secret);
+        map.putString("deviceIdentifier", deviceIdentifier);
+        map.putString("deviceName", deviceName);
+        map.putString("deviceGCMToken", deviceGCMToken);
+        map.putString("deviceToken", deviceToken);
+        map.putString("privateKey", privateKey);
+
+        return map;
+    }
 }
