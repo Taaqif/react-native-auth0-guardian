@@ -198,7 +198,7 @@ class RNAuth0Guardian: NSObject {
         }
     }
     @objc
-    func getTOTP(_ enrollmentId: NSString, resolve: RCTPromiseResolveBlock, rejecter reject: RCTPromiseRejectBlock){
+    func getTOTP(_ enrollmentId: NSString, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock){
         
         if let enrollment = getEnrollment(enrollmentId as String?) {
             let totpInt: Int = try! Guardian.totp(parameters: enrollment.totp!).code();
@@ -324,7 +324,7 @@ class RNAuth0Guardian: NSObject {
     }
   
     @objc
-    func unenroll(_ enrollmentId: NSString, resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
+    func unenroll(_ enrollmentId: NSString, resolver resolve: @escaping RCTPromiseResolveBlock, rejecter reject: @escaping RCTPromiseRejectBlock) {
         if let enrollment = getEnrollment(enrollmentId as String?){
             Guardian
                 .api(forDomain: self.domain!)
